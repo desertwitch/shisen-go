@@ -4,8 +4,8 @@ import (
 	"math/rand"
 )
 
-// GenerateBoard creates a new shuffled board.
-func GenerateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.Rand) *Board {
+// generateBoard creates a new shuffled board.
+func generateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.Rand) *Board {
 	total := innerRows * innerCols
 	if numKinds*tilesPerKind != total {
 		panic("tile count mismatch: numKinds * tilesPerKind must equal innerRows * innerCols")
@@ -14,7 +14,7 @@ func GenerateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.R
 	// Create tile pool
 	pool := make([]TileKind, 0, total)
 	for k := 1; k <= numKinds; k++ {
-		for i := 0; i < tilesPerKind; i++ {
+		for range tilesPerKind {
 			pool = append(pool, TileKind(k))
 		}
 	}
@@ -38,8 +38,8 @@ func GenerateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.R
 	return b
 }
 
-// ShuffleRemaining shuffles all remaining tiles in place.
-func ShuffleRemaining(b *Board, rng *rand.Rand) {
+// shuffleRemaining shuffles all remaining tiles in place.
+func shuffleRemaining(b *Board, rng *rand.Rand) {
 	var positions []Point
 	var tiles []TileKind
 

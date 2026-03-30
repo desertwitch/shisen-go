@@ -16,51 +16,73 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
+// All the different states that a game can have.
 const (
-	ScreenW = 960
-	ScreenH = 650
+	statePlaying = iota
+	stateWin
+	stateStuck
 )
 
 const (
-	HudTopH = 32 // Pixel height of the top HUD
-	HudBotH = 32 // Pixel height of the bottom HUD
-	HudPadY = 4  // Pixel height of HUD padding
-	TileW   = 48 // Pixel width of a tile
-	TileH   = 64 // Pixel height of a tile
+	screenW = 960 // Pixel width total of screen
+	screenH = 650 // Pixel height total of screen
+	hudTopH = 32  // Pixel height of the top HUD
+	hudBotH = 32  // Pixel height of the bottom HUD
+	hudPadY = 4   // Pixel height of HUD padding (Y)
+	tileW   = 48  // Pixel width of a single tile
+	tileH   = 64  // Pixel height of a single tile
+
+	fontSizeHud  = 18
+	fontSizeTile = 28
 )
 
-// Must satisfy: NumTileKinds * TilesPerKind == DefaultInnerRows * DefaultInnerCols
+// Requirement: numTileKinds * tilesPerKind == innerRows * innerCols.
+// Beware if this requirement is not met, the program will panic upon game creation.
 const (
-	DefaultInnerRows = 8
-	DefaultInnerCols = 18
-	NumTileKinds     = 36
-	TilesPerKind     = 4
-)
+	numTileKinds = 36
+	tilesPerKind = 4
+	innerRows    = 8
+	innerCols    = 18
 
-const (
-	StatePlaying = iota
-	StateWin
-	StateStuck
+	defaultSettingShuffles = 3
+
+	timeoutMessageNever   = -1 // frames
+	timeoutMessageWarning = 80 // frames
+	timeoutPathVisible    = 20 // frames
+	timeoutHintVisible    = 90 // frames
+
+	musicSampleRate = 44100
+	musicVolume     = 0.4
 )
 
 //go:embed music.ogg
 var musicOgg []byte
 
-var musicPlayer *audio.Player
+var (
+	gameName = "Shisen-Go"
+	Version  string
 
-var _ ebiten.Game = (*Game)(nil)
+	_           ebiten.Game = (*Game)(nil)
+	musicPlayer *audio.Player
 
-var HudColorDefault = color.RGBA{0x60, 0x60, 0x60, 0xFF}
-var HudColorHighlight = color.RGBA{0xFF, 0xFF, 0x80, 0xFF}
+	gameColorBackground = color.RGBA{0x2A, 0x2D, 0x35, 0xFF}
+
+	hudColorMessageDefault = color.RGBA{0x60, 0x60, 0x60, 0xFF}
+	hudColorMessageWarning = color.RGBA{0xFF, 0xFF, 0x80, 0xFF}
+	hudIdleMessage         = "Welcome to Rysz's Shisen-Go"
+)
 
 type Game struct {
-	board      *Board
-	rng        *rand.Rand
-	state      int // StatePlaying, StateWin, StateStuck
-	audioMuted bool
+	board *Board
+	rng   *rand.Rand
 
-	face   text.Face // Font face for tile symbols
-	uiFace text.Face // Font face for UI text
+	state    int // statePlaying, stateWin, stateStuck
+	shuffles int // Remaining shuffles for the game
+
+	audioMuted bool // If audio was muted by user
+
+	hudFace  text.Face // Font face for UI text
+	tileFace text.Face // Font face for tile symbols
 
 	offsetX float64 // Pixel offset X to center board
 	offsetY float64 // Pixel offset Y to center board
@@ -73,55 +95,81 @@ type Game struct {
 	hint2   *Point // Hint tile 2
 	hintTTL int    // Ticks remaining to show the hints
 
-	shuffles int // Remaining shuffles
-
 	message string // Message (shuffled, stuck, etc...)
 	msgTTL  int    // Ticks remaining to show the message
 }
 
+//nolint:mnd
 func NewGame() *Game {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	board := GenerateBoard(DefaultInnerRows, DefaultInnerCols, NumTileKinds, TilesPerKind, rng)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
+	board := generateBoard(innerRows, innerCols, numTileKinds, tilesPerKind, rng)
 
 	g := &Game{
 		board:    board,
 		rng:      rng,
-		state:    StatePlaying,
-		shuffles: 3,
+		state:    statePlaying,
+		shuffles: defaultSettingShuffles,
 	}
 
 	// Calculate offsets to center the board
-	boardPixelW := float64(board.Cols) * TileW
-	boardPixelH := float64(board.Rows) * TileH
+	boardPixelW := float64(board.Cols) * tileW
+	boardPixelH := float64(board.Rows) * tileH
 
-	g.offsetX = (ScreenW - boardPixelW) / 2
-	g.offsetY = HudTopH + (ScreenH-HudTopH-HudBotH-boardPixelH)/2
+	g.offsetX = (screenW - boardPixelW) / 2
+	g.offsetY = hudTopH + (screenH-hudTopH-hudBotH-boardPixelH)/2
 
 	return g
 }
 
-func (g *Game) initFonts() {
-	src, err := text.NewGoTextFaceSource(bytes.NewReader(goRegularTTF))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	g.face = &text.GoTextFace{
-		Source: src,
-		Size:   28,
-	}
-
-	g.uiFace = &text.GoTextFace{
-		Source: src,
-		Size:   18,
-	}
+func (g *Game) Layout(_, _ int) (int, int) {
+	return screenW, screenH
 }
 
-func (g *Game) Layout(_, _ int) (int, int) {
-	return ScreenW, ScreenH
+func (g *Game) Draw(screen *ebiten.Image) {
+	// Background
+	screen.Fill(gameColorBackground)
+
+	// Draw board tiles
+	r0, c0, r1, c1 := g.board.InnerBounds()
+	for r := r0; r < r1; r++ {
+		for c := c0; c < c1; c++ {
+			kind := g.board.Get(r, c)
+			if kind == TileEmpty {
+				continue
+			}
+
+			x := g.offsetX + float64(c)*tileW
+			y := g.offsetY + float64(r)*tileH
+			selected := false
+
+			// Highlight selected tiles
+			if g.sel1 != nil && g.sel1.R == r && g.sel1.C == c {
+				selected = true
+			}
+
+			// Highlight first hint tile
+			if g.hintTTL > 0 {
+				if (g.hint1 != nil && g.hint1.R == r && g.hint1.C == c) ||
+					(g.hint2 != nil && g.hint2.R == r && g.hint2.C == c) {
+					selected = true
+				}
+			}
+
+			drawTile(screen, kind, x, y, selected)
+		}
+	}
+
+	// Draw path animation
+	if g.pathTTL > 0 && g.path != nil {
+		drawPath(screen, g.path, g.offsetX, g.offsetY)
+	}
+
+	// Draw HUD
+	g.drawHUD(screen)
 }
 
 func (g *Game) Update() error {
+	// Update HUD
 	if g.pathTTL > 0 {
 		g.pathTTL--
 		if g.pathTTL == 0 {
@@ -142,20 +190,24 @@ func (g *Game) Update() error {
 		}
 	}
 
-	if g.state == StatePlaying {
-		if inpututil.IsKeyJustPressed(ebiten.KeyH) { // Hint
+	if g.state == statePlaying {
+		// Hint a possible pairing
+		if inpututil.IsKeyJustPressed(ebiten.KeyH) {
 			g.doHint()
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyS) { // Shuffle
+		// Shuffle remaining tiles
+		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
 			g.doShuffle()
 		}
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) { // Mouse
+		// Select a tile
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 			mx, my := ebiten.CursorPosition()
 			g.handleClick(mx, my)
 		}
 	}
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyA) { // Audio
+	// Toggle the audio
+	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		g.audioMuted = !g.audioMuted
 		if g.audioMuted {
 			musicPlayer.Pause()
@@ -163,93 +215,35 @@ func (g *Game) Update() error {
 			musicPlayer.Play()
 		}
 	}
-
-	if inpututil.IsKeyJustPressed(ebiten.KeyR) { // Restart
+	// Restart the game
+	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		*g = *NewGame()
 		g.initFonts()
-		initTileCache(g.face)
+		initTileCache(g.tileFace)
+
 		return nil
 	}
 
 	return nil
 }
 
-func (g *Game) handleClick(mx, my int) {
-	// Convert pixel to board coordinates
-	col := int(float64(mx)-g.offsetX) / TileW
-	row := int(float64(my)-g.offsetY) / TileH
-
-	r0, c0, r1, c1 := g.board.InnerBounds()
-	if col < 0 || row < 0 || row < r0 || row >= r1 || col < c0 || col >= c1 {
-		return // Outside playable area...
-	}
-	if g.board.IsEmpty(row, col) {
-		return // The clicked cell is empty...
+func (g *Game) initFonts() {
+	src, err := text.NewGoTextFaceSource(bytes.NewReader(goRegularTTF))
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	clicked := Point{row, col}
-
-	if g.sel1 == nil { // First click
-		g.sel1 = &clicked
-		g.hint1 = nil
-		g.hint2 = nil
-		g.hintTTL = 0
-	} else { // Second click
-		if g.sel1.R == clicked.R && g.sel1.C == clicked.C {
-			g.sel1 = nil // The same tile was clicked twice...
-			return
-		}
-
-		path := FindPath(g.board, g.sel1.R, g.sel1.C, clicked.R, clicked.C)
-		if path != nil { // Allowed move
-			g.board.Set(g.sel1.R, g.sel1.C, TileEmpty)
-			g.board.Set(clicked.R, clicked.C, TileEmpty)
-			g.path = path
-			g.pathTTL = 20
-			g.sel1 = nil
-
-			if g.board.RemainingTiles() == 0 {
-				g.state = StateWin
-				g.setMsg("You win! Press R to restart.", -1)
-				return
-			}
-
-			if ok, _, _ := HasAnyMatch(g.board); !ok {
-				if g.shuffles > 0 {
-					g.setMsg("No moves available! Press S to shuffle.", 180)
-				} else {
-					g.state = StateStuck
-					g.setMsg("No moves left! Press R to restart.", -1)
-				}
-			}
-		} else { // Disallowed move
-			g.sel1 = nil
-			g.setMsg("No valid path or wrong kind!", 80)
-		}
-	}
-}
-
-func (g *Game) doHint() {
-	ok, a, _ := HasAnyMatch(g.board)
-	if ok {
-		g.hint1 = &a
-		g.hint2 = nil
-		g.hintTTL = 90
-	} else {
-		g.setMsg("No matches available! Press S to shuffle.", 80)
-	}
-}
-
-func (g *Game) doShuffle() {
-	if g.shuffles <= 0 {
-		g.setMsg("No shuffles remaining!", 80)
-		return
+	// HUD
+	g.hudFace = &text.GoTextFace{
+		Source: src,
+		Size:   fontSizeHud,
 	}
 
-	g.shuffles--
-	ShuffleRemaining(g.board, g.rng)
-	g.sel1 = nil
-	g.setMsg(fmt.Sprintf("Shuffled! (%d remaining)", g.shuffles), 80)
+	// Tiles
+	g.tileFace = &text.GoTextFace{
+		Source: src,
+		Size:   fontSizeTile,
+	}
 }
 
 func (g *Game) setMsg(msg string, ttl int) {
@@ -257,79 +251,139 @@ func (g *Game) setMsg(msg string, ttl int) {
 	g.msgTTL = ttl
 }
 
-func (g *Game) Draw(screen *ebiten.Image) {
-	// Background
-	screen.Fill(color.RGBA{0x2A, 0x2D, 0x35, 0xFF})
+func (g *Game) handleClick(mx, my int) {
+	// Convert pixel to board coordinates
+	col := int(float64(mx)-g.offsetX) / tileW
+	row := int(float64(my)-g.offsetY) / tileH
+	clicked := Point{row, col}
 
-	// Draw board tiles
+	// Check if click is within playable area
 	r0, c0, r1, c1 := g.board.InnerBounds()
-	for r := r0; r < r1; r++ {
-		for c := c0; c < c1; c++ {
-			kind := g.board.Get(r, c)
-			if kind == TileEmpty {
-				continue
-			}
+	if col < 0 || row < 0 || row < r0 || row >= r1 || col < c0 || col >= c1 {
+		return
+	}
+	if g.board.IsEmpty(row, col) {
+		return
+	}
 
-			x := g.offsetX + float64(c)*TileW
-			y := g.offsetY + float64(r)*TileH
-			selected := false
+	// If it's the first click, register and bail out.
+	if g.sel1 == nil {
+		g.sel1 = &clicked
+		g.hint1 = nil
+		g.hint2 = nil
+		g.hintTTL = 0
 
-			// Highlight selected tiles
-			if g.sel1 != nil && g.sel1.R == r && g.sel1.C == c {
-				selected = true
-			}
+		return
+	}
 
-			// Highlight first hint tile
-			if g.hintTTL > 0 {
-				if (g.hint1 != nil && g.hint1.R == r && g.hint1.C == c) ||
-					(g.hint2 != nil && g.hint2.R == r && g.hint2.C == c) {
-					selected = true
-				}
-			}
+	// The second click was the same as the first click (deselect).
+	if g.sel1.R == clicked.R && g.sel1.C == clicked.C {
+		g.sel1 = nil
 
-			DrawTile(screen, kind, x, y, selected)
+		return
+	}
+
+	// Check if it's a valid connection between the selected tiles.
+	path := findPath(g.board, g.sel1.R, g.sel1.C, clicked.R, clicked.C)
+	if path != nil {
+		g.board.Set(g.sel1.R, g.sel1.C, TileEmpty)
+		g.board.Set(clicked.R, clicked.C, TileEmpty)
+
+		g.path = path
+		g.pathTTL = timeoutPathVisible
+		g.sel1 = nil
+
+		if g.board.RemainingTiles() == 0 {
+			g.state = stateWin
+			g.setMsg("You win! Press R to restart.", timeoutMessageNever)
+
+			return
 		}
+
+		if ok, _, _ := hasAnyMatch(g.board); !ok {
+			if g.shuffles > 0 {
+				g.setMsg("No moves available! Press S to shuffle.", timeoutMessageNever)
+			} else {
+				g.state = stateStuck
+				g.setMsg("No moves left! Press R to restart.", timeoutMessageNever)
+			}
+		}
+
+		return
 	}
 
-	// Draw path animation
-	if g.pathTTL > 0 && g.path != nil {
-		DrawPath(screen, g.path, g.offsetX, g.offsetY)
-	}
-
-	// Draw HUD
-	g.drawHUD(screen)
+	// No connection is possible.
+	g.sel1 = nil
+	g.setMsg("No valid path or wrong kind!", timeoutMessageWarning)
 }
 
+func (g *Game) doHint() {
+	// Check if we have any possible connections left.
+	ok, a, _ := hasAnyMatch(g.board)
+	if ok {
+		g.hint1 = &a
+		g.hint2 = nil
+		g.hintTTL = timeoutHintVisible
+
+		return
+	}
+
+	// None are left, offer to shuffle or restart the game (if no shuffles left).
+	if g.shuffles > 0 {
+		g.setMsg("No moves available! Press S to shuffle.", timeoutMessageNever)
+	} else {
+		g.state = stateStuck
+		g.setMsg("No moves left! Press R to restart.", timeoutMessageNever)
+	}
+}
+
+func (g *Game) doShuffle() {
+	// Check if we have shuffles left, otherwise bail out.
+	if g.shuffles <= 0 {
+		g.setMsg("No shuffles remaining!", timeoutMessageWarning)
+
+		return
+	}
+
+	// Reduce the shuffles and shuffle the remaining tiles.
+	g.shuffles--
+	shuffleRemaining(g.board, g.rng)
+
+	// Deselect the selected tile as the position has changed.
+	g.sel1 = nil
+	g.setMsg(fmt.Sprintf("Shuffled! (%d remaining)", g.shuffles), timeoutMessageWarning)
+}
+
+//nolint:mnd
 func (g *Game) drawHUD(screen *ebiten.Image) {
-	// Top bar message
-	message := "Welcome to Rysz's Shisen-Go"
-	msgColor := HudColorDefault
+	// Draw the HUD at the top of the screen:
+	msg := hudIdleMessage
+	msgColor := hudColorMessageDefault
 
 	if g.message != "" {
-		message = g.message
-		msgColor = HudColorHighlight
+		msg = g.message
+		msgColor = hudColorMessageWarning
 	}
 
 	op := &text.DrawOptions{}
-	w, h := text.Measure(message, g.uiFace, 0)
-	op.GeoM.Translate(float64(ScreenW)/2-w/2, (float64(HudTopH-h)/2)+HudPadY)
+	w, h := text.Measure(msg, g.hudFace, 0)
+	op.GeoM.Translate(float64(screenW)/2-w/2, (float64(hudTopH-h)/2)+hudPadY)
 	op.ColorScale.ScaleWithColor(msgColor)
-	text.Draw(screen, message, g.uiFace, op)
+	text.Draw(screen, msg, g.hudFace, op)
 
-	// Bottom bar message
+	// Draw the HUD at the bottom of the screen:
 	remaining := g.board.RemainingTiles()
 	info := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  [H] Hint  [S] Shuffle  [R] Restart  [A] Audio", remaining, g.shuffles)
 
 	op = &text.DrawOptions{}
-	w, h = text.Measure(info, g.uiFace, 0)
-	op.GeoM.Translate(float64(ScreenW)/2-w/2, float64(ScreenH-HudBotH)+(float64(HudBotH)-h)/2-HudPadY)
-	op.ColorScale.ScaleWithColor(HudColorDefault)
-	text.Draw(screen, info, g.uiFace, op)
+	w, h = text.Measure(info, g.hudFace, 0)
+	op.GeoM.Translate(float64(screenW)/2-w/2, float64(screenH-hudBotH)+(float64(hudBotH)-h)/2-hudPadY)
+	op.ColorScale.ScaleWithColor(hudColorMessageDefault)
+	text.Draw(screen, info, g.hudFace, op)
 }
 
 func main() {
-	audioCtx := audio.NewContext(44100)
-
+	audioCtx := audio.NewContext(musicSampleRate)
 	stream, err := vorbis.DecodeWithoutResampling(bytes.NewReader(musicOgg))
 	if err != nil {
 		log.Fatal(err)
@@ -339,15 +393,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	musicPlayer.SetVolume(0.4)
+	musicPlayer.SetVolume(musicVolume)
 	musicPlayer.Play()
 
 	g := NewGame()
 	g.initFonts()
-	initTileCache(g.face)
+	initTileCache(g.tileFace)
 
-	ebiten.SetWindowSize(ScreenW, ScreenH)
-	ebiten.SetWindowTitle("Shisen-Sho")
+	ebiten.SetWindowSize(screenW, screenH)
+	ebiten.SetWindowTitle(gameName + " " + Version)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	if err := ebiten.RunGame(g); err != nil {

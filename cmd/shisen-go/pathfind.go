@@ -10,9 +10,11 @@ var dirs = [4]Point{
 	{-1, 0}, {1, 0}, {0, -1}, {0, 1},
 }
 
-// FindPath checks whether tiles at (r1,c1) and (r2,c2) can be connected.
+// findPath checks whether tiles at (r1,c1) and (r2,c2) can be connected.
 // It returns the path as corner points (including start and end), or nil.
-func FindPath(b *Board, r1, c1, r2, c2 int) []Point {
+//
+//nolint:cyclop
+func findPath(b *Board, r1, c1, r2, c2 int) []Point {
 	// Both selected tiles are actually the same tile:
 	if r1 == r2 && c1 == c2 {
 		return nil
@@ -56,7 +58,7 @@ func FindPath(b *Board, r1, c1, r2, c2 int) []Point {
 		return []Point{start, {r1, c2}, end}
 	}
 
-	// Walk a ray from the start in each direction, for every empty {MR.MC} on
+	// Walk a ray from the start in each direction, for every empty (mr,mc) on
 	// the way we then try to find a 1-bend connection towards the actual end point.
 	for _, d := range dirs {
 		mr, mc := r1+d.R, c1+d.C
@@ -103,6 +105,7 @@ func clearBetween(b *Board, r1, c1, r2, c2 int) bool {
 				return false
 			}
 		}
+
 		return true
 	}
 
@@ -114,14 +117,17 @@ func clearBetween(b *Board, r1, c1, r2, c2 int) bool {
 				return false
 			}
 		}
+
 		return true
 	}
 
 	return false
 }
 
-// HasAnyMatch checks whether any valid pair exists on the board.
-func HasAnyMatch(b *Board) (bool, Point, Point) {
+// hasAnyMatch checks whether any valid pair exists on the board.
+//
+//nolint:unparam
+func hasAnyMatch(b *Board) (bool, Point, Point) {
 	r0, c0, r1, c1 := b.InnerBounds()
 
 	// Group tile positions by kind
@@ -137,10 +143,10 @@ func HasAnyMatch(b *Board) (bool, Point, Point) {
 
 	// Check all possible combinations
 	for _, positions := range groups {
-		for i := 0; i < len(positions); i++ {
+		for i := range positions {
 			for j := i + 1; j < len(positions); j++ {
 				src, dst := positions[i], positions[j]
-				if FindPath(b, src.R, src.C, dst.R, dst.C) != nil {
+				if findPath(b, src.R, src.C, dst.R, dst.C) != nil {
 					return true, src, dst
 				}
 			}

@@ -10,13 +10,15 @@ const (
 // Board holds the 2D grid of tiles.
 // A 1-cell empty border is present on every side.
 type Board struct {
-	Rows  int // total rows including border
-	Cols  int // total cols including border
-	Cells [][]TileKind
+	Rows  int          // Rows including border
+	Cols  int          // Columns including border
+	Cells [][]TileKind // Grid including borders
 }
 
 // NewBoard creates a board with the given inner dimensions (playable area).
 // A 1-cell empty border is added on every side.
+//
+//nolint:mnd
 func NewBoard(innerRows, innerCols int) *Board {
 	rows := innerRows + 2
 	cols := innerCols + 2
@@ -31,6 +33,8 @@ func NewBoard(innerRows, innerCols int) *Board {
 }
 
 // InnerBounds returns the top-left and bottom-right of the playable area.
+//
+//nolint:nonamedreturns
 func (b *Board) InnerBounds() (r0, c0, r1, c1 int) {
 	return 1, 1, b.Rows - 1, b.Cols - 1
 }
