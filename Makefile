@@ -13,11 +13,11 @@ VERSION := $(shell \
 all: vendor $(BINARY) ## Runs the entire build chain for the application
 
 $(BINARY): ## Builds the application
-	CGO_ENABLED=0 GOFLAGS="-mod=vendor" go build -ldflags="-w -s -X main.Version=$(VERSION) -buildid=" -trimpath -o $(BINARY) $(SRC_DIR)
+	CGO_ENABLED=0 GOFLAGS="-mod=vendor" go build -ldflags="-w -s -X main.GameVersion=$(VERSION) -buildid=" -trimpath -o $(BINARY) $(SRC_DIR)
 	@$(MAKE) info
 
 $(BINARY)-wasm: ## Builds the application as WASM
-	GOOS=js GOARCH=wasm CGO_ENABLED=0 GOFLAGS="-mod=vendor" go build -ldflags="-w -s -X main.Version=$(VERSION) -buildid=" -trimpath -o $(BINARY).wasm $(SRC_DIR)
+	GOOS=js GOARCH=wasm CGO_ENABLED=0 GOFLAGS="-mod=vendor" go build -ldflags="-w -s -X main.GameVersion=$(VERSION) -buildid=" -trimpath -o $(BINARY).wasm $(SRC_DIR)
 	@$(MAKE) info
 
 benchmark: ## Runs the benchmark script
