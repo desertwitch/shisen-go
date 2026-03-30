@@ -74,7 +74,7 @@ var (
 
 	pathColor = color.RGBA{0xFF, 0xC0, 0x00, 0xFF} // gold
 
-	hudIdleMessage         = "Welcome to Rysz's Shisen-Go"
+	hudIdleMessage         = "Rysz's Shisen-Go"
 	hudColorMessageDefault = color.RGBA{0x60, 0x60, 0x60, 0xFF}
 	hudColorMessageWarning = color.RGBA{0xFF, 0xFF, 0x80, 0xFF}
 )

@@ -8,12 +8,16 @@ VERSION := $(shell \
   if [ -n "$$tag" ]; then echo $$tag | sed 's/^v//'; \
   else git rev-parse --short=7 HEAD; fi)
 
-.PHONY: all $(BINARY) benchmark check clean help info lint test test-coverage vendor
+.PHONY: all $(BINARY) $(BINARY)-wasm benchmark check clean help info lint test test-coverage vendor
 
 all: vendor $(BINARY) ## Runs the entire build chain for the application
 
 $(BINARY): ## Builds the application
-	GOOS=js GOARCH=wasm CGO_ENABLED=0 GOFLAGS="-mod=vendor" go build -ldflags="-w -s -buildid=" -trimpath -o $(BINARY).wasm $(SRC_DIR)
+	CGO_ENABLED=0 GOFLAGS="-mod=vendor" go build -ldflags="-w -s -X main.Version=$(VERSION) -buildid=" -trimpath -o $(BINARY) $(SRC_DIR)
+	@$(MAKE) info
+
+$(BINARY)-wasm: ## Builds the application as WASM
+	GOOS=js GOARCH=wasm CGO_ENABLED=0 GOFLAGS="-mod=vendor" go build -ldflags="-w -s -X main.Version=$(VERSION) -buildid=" -trimpath -o $(BINARY).wasm $(SRC_DIR)
 	@$(MAKE) info
 
 benchmark: ## Runs the benchmark script

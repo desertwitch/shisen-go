@@ -26,7 +26,7 @@ jobs:
         run: |
           make clean
           make vendor
-          make shisen-go
+          make shisen-go-wasm
           mkdir -p dist
           mv shisen-go.wasm dist/
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist/
