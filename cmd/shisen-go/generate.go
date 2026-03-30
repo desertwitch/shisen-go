@@ -4,6 +4,22 @@ import (
 	"math/rand"
 )
 
+// solvePair records one matching move: two positions sharing the same tile kind.
+type solvePair struct {
+	A, B Point
+	Kind TileKind
+}
+
+// generateSolvableBoard generates a new shuffled board that was solvable at generation time.
+func generateSolvableBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.Rand) *Board {
+	for {
+		b := generateBoard(innerRows, innerCols, numKinds, tilesPerKind, rng)
+		if solveBoard(b) != nil {
+			return b
+		}
+	}
+}
+
 // generateBoard creates a new shuffled board.
 func generateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.Rand) *Board {
 	total := innerRows * innerCols
@@ -36,6 +52,36 @@ func generateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.R
 	}
 
 	return b
+}
+
+// solveBoard returns a sequence that clears the board, or nil if unsolvable.
+// This is a greedy solver: it repeatedly finds any valid pair and removes it.
+//
+//nolint:mnd
+func solveBoard(b *Board) []solvePair {
+	work := NewBoard(b.Rows-2, b.Cols-2)
+	r0, _, r1, _ := b.InnerBounds()
+	for r := r0; r < r1; r++ {
+		copy(work.Cells[r], b.Cells[r])
+	}
+
+	var moves []solvePair
+	for {
+		found, a, b := hasAnyMatch(work)
+		if !found {
+			break
+		}
+		kind := work.Cells[a.R][a.C]
+		work.Cells[a.R][a.C] = TileEmpty
+		work.Cells[b.R][b.C] = TileEmpty
+		moves = append(moves, solvePair{A: a, B: b, Kind: kind})
+	}
+
+	if work.RemainingTiles() != 0 {
+		return nil // Unsolvable
+	}
+
+	return moves
 }
 
 // shuffleRemaining shuffles all remaining tiles in place.

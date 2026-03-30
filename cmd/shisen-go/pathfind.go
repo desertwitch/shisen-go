@@ -6,7 +6,7 @@ type Point struct {
 }
 
 // Direction vectors: up, down, left, right.
-var dirs = [4]Point{
+var directions = [4]Point{
 	{-1, 0}, {1, 0}, {0, -1}, {0, 1},
 }
 
@@ -60,7 +60,7 @@ func findPath(b *Board, r1, c1, r2, c2 int) []Point {
 
 	// Walk a ray from the start in each direction, for every empty (mr,mc) on
 	// the way we then try to find a 1-bend connection towards the actual end point.
-	for _, d := range dirs {
+	for _, d := range directions {
 		mr, mc := r1+d.R, c1+d.C
 		for mr >= 0 && mr < b.Rows && mc >= 0 && mc < b.Cols && b.IsEmpty(mr, mc) {
 			// 2 bends (vertical):
@@ -125,8 +125,6 @@ func clearBetween(b *Board, r1, c1, r2, c2 int) bool {
 }
 
 // hasAnyMatch checks whether any valid pair exists on the board.
-//
-//nolint:unparam
 func hasAnyMatch(b *Board) (bool, Point, Point) {
 	r0, c0, r1, c1 := b.InnerBounds()
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"image/color"
 	"log"
 	"math/rand"
 	"time"
@@ -16,62 +15,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
-// All the different states that a game can have.
-const (
-	statePlaying = iota
-	stateWin
-	stateStuck
-)
-
-const (
-	screenW = 960 // Pixel width total of screen
-	screenH = 650 // Pixel height total of screen
-	hudTopH = 32  // Pixel height of the top HUD
-	hudBotH = 32  // Pixel height of the bottom HUD
-	hudPadY = 4   // Pixel height of HUD padding (Y)
-	tileW   = 48  // Pixel width of a single tile
-	tileH   = 64  // Pixel height of a single tile
-
-	fontSizeHud  = 18
-	fontSizeTile = 28
-)
-
-// Requirement: numTileKinds * tilesPerKind == innerRows * innerCols.
-// Beware if this requirement is not met, the program will panic upon game creation.
-const (
-	numTileKinds = 36
-	tilesPerKind = 4
-	innerRows    = 8
-	innerCols    = 18
-
-	defaultSettingShuffles = 3
-
-	timeoutMessageNever   = -1 // frames
-	timeoutMessageWarning = 80 // frames
-	timeoutPathVisible    = 20 // frames
-	timeoutHintVisible    = 90 // frames
-
-	musicSampleRate = 44100
-	musicVolume     = 0.4
-)
-
-//go:embed music.ogg
-var musicOgg []byte
-
-var (
-	gameName = "Shisen-Go"
-	Version  string
-
-	_           ebiten.Game = (*Game)(nil)
-	musicPlayer *audio.Player
-
-	gameColorBackground = color.RGBA{0x2A, 0x2D, 0x35, 0xFF}
-
-	hudColorMessageDefault = color.RGBA{0x60, 0x60, 0x60, 0xFF}
-	hudColorMessageWarning = color.RGBA{0xFF, 0xFF, 0x80, 0xFF}
-	hudIdleMessage         = "Welcome to Rysz's Shisen-Go"
-)
-
+// Game is the primary structure for our game.
 type Game struct {
 	board *Board
 	rng   *rand.Rand
@@ -99,16 +43,36 @@ type Game struct {
 	msgTTL  int    // Ticks remaining to show the message
 }
 
+// NewGame returns a new Game instance, can be called multiple times.
+//
 //nolint:mnd
 func NewGame() *Game {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
-	board := generateBoard(innerRows, innerCols, numTileKinds, tilesPerKind, rng)
+	board := generateSolvableBoard(innerRows, innerCols, numTileKinds, tilesPerKind, rng)
 
 	g := &Game{
 		board:    board,
 		rng:      rng,
 		state:    statePlaying,
-		shuffles: defaultSettingShuffles,
+		shuffles: defaultShuffles,
+	}
+
+	// Font
+	src, err := text.NewGoTextFaceSource(bytes.NewReader(gameFont))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// HUD
+	g.hudFace = &text.GoTextFace{
+		Source: src,
+		Size:   fontSizeHud,
+	}
+
+	// Tiles
+	g.tileFace = &text.GoTextFace{
+		Source: src,
+		Size:   fontSizeTile,
 	}
 
 	// Calculate offsets to center the board
@@ -121,10 +85,70 @@ func NewGame() *Game {
 	return g
 }
 
+// Update handles the updating of all game elements and also keystrokes.
+func (g *Game) Update() error {
+	// Update HUD
+	if g.pathTTL > 0 {
+		g.pathTTL--
+		if g.pathTTL == 0 {
+			g.path = nil
+		}
+	}
+	if g.hintTTL > 0 {
+		g.hintTTL--
+		if g.hintTTL == 0 {
+			g.hint1 = nil
+			g.hint2 = nil
+		}
+	}
+	if g.msgTTL > 0 {
+		g.msgTTL--
+		if g.msgTTL == 0 {
+			g.message = ""
+		}
+	}
+
+	if g.state == statePlaying {
+		// Hint a possible pairing
+		if inpututil.IsKeyJustPressed(ebiten.KeyH) {
+			g.doHint()
+		}
+		// Shuffle remaining tiles
+		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+			g.doShuffle()
+		}
+		// Select a tile
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+			mx, my := ebiten.CursorPosition()
+			g.handleClick(mx, my)
+		}
+	}
+
+	// Toggle the audio
+	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
+		g.audioMuted = !g.audioMuted
+		if g.audioMuted {
+			gameMusicPlayer.Pause()
+		} else {
+			gameMusicPlayer.Play()
+		}
+	}
+	// Restart the game
+	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
+		*g = *NewGame()
+		initTileCache(g.tileFace)
+
+		return nil
+	}
+
+	return nil
+}
+
 func (g *Game) Layout(_, _ int) (int, int) {
 	return screenW, screenH
 }
 
+// Draw handles the drawing of all game graphics.
 func (g *Game) Draw(screen *ebiten.Image) {
 	// Background
 	screen.Fill(gameColorBackground)
@@ -168,89 +192,37 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawHUD(screen)
 }
 
-func (g *Game) Update() error {
-	// Update HUD
-	if g.pathTTL > 0 {
-		g.pathTTL--
-		if g.pathTTL == 0 {
-			g.path = nil
-		}
-	}
-	if g.hintTTL > 0 {
-		g.hintTTL--
-		if g.hintTTL == 0 {
-			g.hint1 = nil
-			g.hint2 = nil
-		}
-	}
-	if g.msgTTL > 0 {
-		g.msgTTL--
-		if g.msgTTL == 0 {
-			g.message = ""
-		}
+// drawHUD is a helper function that draws the HUD onto the screen.
+//
+//nolint:mnd
+func (g *Game) drawHUD(screen *ebiten.Image) {
+	// Draw the HUD at the top of the screen:
+	msg := hudIdleMessage
+	msgColor := hudColorMessageDefault
+
+	if g.message != "" {
+		msg = g.message
+		msgColor = hudColorMessageWarning
 	}
 
-	if g.state == statePlaying {
-		// Hint a possible pairing
-		if inpututil.IsKeyJustPressed(ebiten.KeyH) {
-			g.doHint()
-		}
-		// Shuffle remaining tiles
-		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
-			g.doShuffle()
-		}
-		// Select a tile
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			mx, my := ebiten.CursorPosition()
-			g.handleClick(mx, my)
-		}
-	}
+	op := &text.DrawOptions{}
+	w, h := text.Measure(msg, g.hudFace, 0)
+	op.GeoM.Translate(float64(screenW)/2-w/2, (float64(hudTopH-h)/2)+hudPadY)
+	op.ColorScale.ScaleWithColor(msgColor)
+	text.Draw(screen, msg, g.hudFace, op)
 
-	// Toggle the audio
-	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
-		g.audioMuted = !g.audioMuted
-		if g.audioMuted {
-			musicPlayer.Pause()
-		} else {
-			musicPlayer.Play()
-		}
-	}
-	// Restart the game
-	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
-		*g = *NewGame()
-		g.initFonts()
-		initTileCache(g.tileFace)
+	// Draw the HUD at the bottom of the screen:
+	remaining := g.board.RemainingTiles()
+	info := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  [H] Hint  [S] Shuffle  [R] Restart  [A] Audio", remaining, g.shuffles)
 
-		return nil
-	}
-
-	return nil
+	op = &text.DrawOptions{}
+	w, h = text.Measure(info, g.hudFace, 0)
+	op.GeoM.Translate(float64(screenW)/2-w/2, float64(screenH-hudBotH)+(float64(hudBotH)-h)/2-hudPadY)
+	op.ColorScale.ScaleWithColor(hudColorMessageDefault)
+	text.Draw(screen, info, g.hudFace, op)
 }
 
-func (g *Game) initFonts() {
-	src, err := text.NewGoTextFaceSource(bytes.NewReader(goRegularTTF))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// HUD
-	g.hudFace = &text.GoTextFace{
-		Source: src,
-		Size:   fontSizeHud,
-	}
-
-	// Tiles
-	g.tileFace = &text.GoTextFace{
-		Source: src,
-		Size:   fontSizeTile,
-	}
-}
-
-func (g *Game) setMsg(msg string, ttl int) {
-	g.message = msg
-	g.msgTTL = ttl
-}
-
+// handeClick implements the clicking logic for selecting tiles.
 func (g *Game) handleClick(mx, my int) {
 	// Convert pixel to board coordinates
 	col := int(float64(mx)-g.offsetX) / tileW
@@ -295,17 +267,17 @@ func (g *Game) handleClick(mx, my int) {
 
 		if g.board.RemainingTiles() == 0 {
 			g.state = stateWin
-			g.setMsg("You win! Press R to restart.", timeoutMessageNever)
+			g.setMessage("You win! Press R to restart.", timeoutMessageNever)
 
 			return
 		}
 
 		if ok, _, _ := hasAnyMatch(g.board); !ok {
 			if g.shuffles > 0 {
-				g.setMsg("No moves available! Press S to shuffle.", timeoutMessageNever)
+				g.setMessage("No moves available! Press S to shuffle.", timeoutMessageNever)
 			} else {
 				g.state = stateStuck
-				g.setMsg("No moves left! Press R to restart.", timeoutMessageNever)
+				g.setMessage("No moves left! Press R to restart.", timeoutMessageNever)
 			}
 		}
 
@@ -314,9 +286,16 @@ func (g *Game) handleClick(mx, my int) {
 
 	// No connection is possible.
 	g.sel1 = nil
-	g.setMsg("No valid path or wrong kind!", timeoutMessageWarning)
+	g.setMessage("No valid path or wrong kind!", timeoutMessageWarning)
 }
 
+// setMessage sets a message and TTL to be shown in the HUD.
+func (g *Game) setMessage(msg string, ttl int) {
+	g.message = msg
+	g.msgTTL = ttl
+}
+
+// doHint handles when the users requests a hint to be shown.
 func (g *Game) doHint() {
 	// Check if we have any possible connections left.
 	ok, a, _ := hasAnyMatch(g.board)
@@ -330,17 +309,17 @@ func (g *Game) doHint() {
 
 	// None are left, offer to shuffle or restart the game (if no shuffles left).
 	if g.shuffles > 0 {
-		g.setMsg("No moves available! Press S to shuffle.", timeoutMessageNever)
+		g.setMessage("No moves available! Press S to shuffle.", timeoutMessageNever)
 	} else {
 		g.state = stateStuck
-		g.setMsg("No moves left! Press R to restart.", timeoutMessageNever)
+		g.setMessage("No moves left! Press R to restart.", timeoutMessageNever)
 	}
 }
 
 func (g *Game) doShuffle() {
 	// Check if we have shuffles left, otherwise bail out.
 	if g.shuffles <= 0 {
-		g.setMsg("No shuffles remaining!", timeoutMessageWarning)
+		g.setMessage("No shuffles remaining!", timeoutMessageWarning)
 
 		return
 	}
@@ -351,57 +330,28 @@ func (g *Game) doShuffle() {
 
 	// Deselect the selected tile as the position has changed.
 	g.sel1 = nil
-	g.setMsg(fmt.Sprintf("Shuffled! (%d remaining)", g.shuffles), timeoutMessageWarning)
-}
-
-//nolint:mnd
-func (g *Game) drawHUD(screen *ebiten.Image) {
-	// Draw the HUD at the top of the screen:
-	msg := hudIdleMessage
-	msgColor := hudColorMessageDefault
-
-	if g.message != "" {
-		msg = g.message
-		msgColor = hudColorMessageWarning
-	}
-
-	op := &text.DrawOptions{}
-	w, h := text.Measure(msg, g.hudFace, 0)
-	op.GeoM.Translate(float64(screenW)/2-w/2, (float64(hudTopH-h)/2)+hudPadY)
-	op.ColorScale.ScaleWithColor(msgColor)
-	text.Draw(screen, msg, g.hudFace, op)
-
-	// Draw the HUD at the bottom of the screen:
-	remaining := g.board.RemainingTiles()
-	info := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  [H] Hint  [S] Shuffle  [R] Restart  [A] Audio", remaining, g.shuffles)
-
-	op = &text.DrawOptions{}
-	w, h = text.Measure(info, g.hudFace, 0)
-	op.GeoM.Translate(float64(screenW)/2-w/2, float64(screenH-hudBotH)+(float64(hudBotH)-h)/2-hudPadY)
-	op.ColorScale.ScaleWithColor(hudColorMessageDefault)
-	text.Draw(screen, info, g.hudFace, op)
+	g.setMessage(fmt.Sprintf("Shuffled! (%d remaining)", g.shuffles), timeoutMessageWarning)
 }
 
 func main() {
-	audioCtx := audio.NewContext(musicSampleRate)
+	audioCtx := audio.NewContext(gameMusicSampleRate)
 	stream, err := vorbis.DecodeWithoutResampling(bytes.NewReader(musicOgg))
 	if err != nil {
 		log.Fatal(err)
 	}
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
-	musicPlayer, err = audioCtx.NewPlayer(loop)
+	gameMusicPlayer, err = audioCtx.NewPlayer(loop)
 	if err != nil {
 		log.Fatal(err)
 	}
-	musicPlayer.SetVolume(musicVolume)
-	musicPlayer.Play()
+	gameMusicPlayer.SetVolume(gameMusicVolume)
+	gameMusicPlayer.Play()
 
 	g := NewGame()
-	g.initFonts()
 	initTileCache(g.tileFace)
 
 	ebiten.SetWindowSize(screenW, screenH)
-	ebiten.SetWindowTitle(gameName + " " + Version)
+	ebiten.SetWindowTitle(GameName + " " + GameVersion)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	if err := ebiten.RunGame(g); err != nil {
