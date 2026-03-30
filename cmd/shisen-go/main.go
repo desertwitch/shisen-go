@@ -286,7 +286,7 @@ func (g *Game) handleClick(mx, my int) {
 
 	// No connection is possible.
 	g.sel1 = nil
-	g.setMessage("No valid path or wrong kind!", timeoutMessageWarning)
+	g.setMessage("No valid path or color not matching!", timeoutMessageWarning)
 }
 
 // setMessage sets a message and TTL to be shown in the HUD.
