@@ -1,0 +1,42 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.5'
+
+      - name: Build WASM
+        run: |
+          make clean
+          make vendor
+          make shisen-go
+          mkdir -p dist
+          mv shisen-go.wasm dist/
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist/
+          cp html/index.html dist/
+          cp html/main.html dist/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy WASM
+        id: deployment
+        uses: actions/deploy-pages@v4
