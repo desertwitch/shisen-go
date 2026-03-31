@@ -6,7 +6,8 @@
 <script src="wasm_exec.js"></script>
 <script>
 const go = new Go();
-WebAssembly.instantiateStreaming(fetch("shisen-go.wasm"), go.importObject).then(result => {
+const v = "__VERSION__"; 
+WebAssembly.instantiateStreaming(fetch("shisen-go.wasm?v=" + v), go.importObject).then(result => {
     go.run(result.instance);
 });
 </script>

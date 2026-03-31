@@ -32,6 +32,7 @@ jobs:
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist/
           cp html/index.html dist/
           cp html/main.html dist/
+          sed -i 's/__VERSION__/${{ github.sha }}/' dist/main.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
