@@ -31,7 +31,7 @@ linters:
         - -S1008
     mnd:
       ignored-numbers:
-        - 2
+        - "2"
   exclusions:
     generated: lax
     presets:
