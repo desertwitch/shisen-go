@@ -368,9 +368,8 @@ func (g *Game) handleClick(mx, my int) {
 		return
 	}
 
-	// No connection is possible.
-	g.sel1 = nil
-	g.setMessage("No valid path or symbol not matching!", timeoutMessageWarning)
+	// No connection is possible, just select the clicked tile.
+	g.sel1 = &clicked
 }
 
 // setMessage sets a message and TTL to be shown in the HUD.
