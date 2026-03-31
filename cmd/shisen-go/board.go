@@ -1,32 +1,30 @@
 package main
 
-// TileKind represents a type of mahjong tile.
-type TileKind int
+// TileSymbol represents a type of mahjong tile.
+type TileSymbol int
 
 const (
-	TileEmpty TileKind = 0
+	TileEmpty TileSymbol = 0
 )
 
 // Board holds the 2D grid of tiles.
 // A 1-cell empty border is present on every side.
 type Board struct {
-	Rows  int          // Rows including border
-	Cols  int          // Columns including border
-	Cells [][]TileKind // Grid including borders
+	Rows  int            // Rows including border
+	Cols  int            // Columns including border
+	Cells [][]TileSymbol // Grid including borders
 }
 
 // NewBoard creates a board with the given inner dimensions (playable area).
 // A 1-cell empty border is added on every side.
-//
-//nolint:mnd
 func NewBoard(innerRows, innerCols int) *Board {
 	rows := innerRows + 2
 	cols := innerCols + 2
 
-	cells := make([][]TileKind, rows)
+	cells := make([][]TileSymbol, rows)
 
 	for r := range cells {
-		cells[r] = make([]TileKind, cols)
+		cells[r] = make([]TileSymbol, cols)
 	}
 
 	return &Board{Rows: rows, Cols: cols, Cells: cells}
@@ -40,7 +38,7 @@ func (b *Board) InnerBounds() (r0, c0, r1, c1 int) {
 }
 
 // Get returns the tile at (r,c) or TileEmpty (out of bounds).
-func (b *Board) Get(r, c int) TileKind {
+func (b *Board) Get(r, c int) TileSymbol {
 	if r < 0 || r >= b.Rows || c < 0 || c >= b.Cols {
 		return TileEmpty
 	}
@@ -48,8 +46,8 @@ func (b *Board) Get(r, c int) TileKind {
 	return b.Cells[r][c]
 }
 
-// Set places a tile kind at (r,c).
-func (b *Board) Set(r, c int, k TileKind) {
+// Set places a tile symbol at (r,c).
+func (b *Board) Set(r, c int, k TileSymbol) {
 	b.Cells[r][c] = k
 }
 

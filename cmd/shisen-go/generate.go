@@ -4,16 +4,16 @@ import (
 	"math/rand"
 )
 
-// solvePair records one matching move: two positions sharing the same tile kind.
+// solvePair records one matching move: two positions sharing the same tile symbol.
 type solvePair struct {
-	A, B Point
-	Kind TileKind
+	A, B   Point
+	Symbol TileSymbol
 }
 
 // generateSolvableBoard generates a new shuffled board that was solvable at generation time.
-func generateSolvableBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.Rand) *Board {
+func generateSolvableBoard(innerRows, innerCols, numSymbols, tilesPerSymbol int, rng *rand.Rand) *Board {
 	for {
-		b := generateBoard(innerRows, innerCols, numKinds, tilesPerKind, rng)
+		b := generateBoard(innerRows, innerCols, numSymbols, tilesPerSymbol, rng)
 		if solveBoard(b) != nil {
 			return b
 		}
@@ -21,17 +21,17 @@ func generateSolvableBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng
 }
 
 // generateBoard creates a new shuffled board.
-func generateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.Rand) *Board {
+func generateBoard(innerRows, innerCols, numSymbols, tilesPerSymbol int, rng *rand.Rand) *Board {
 	total := innerRows * innerCols
-	if numKinds*tilesPerKind != total {
-		panic("tile count mismatch: numKinds * tilesPerKind must equal innerRows * innerCols")
+	if numSymbols*tilesPerSymbol != total {
+		panic("tile count mismatch: numSymbols * tilesPerSymbol must equal innerRows * innerCols")
 	}
 
 	// Create tile pool
-	pool := make([]TileKind, 0, total)
-	for k := 1; k <= numKinds; k++ {
-		for range tilesPerKind {
-			pool = append(pool, TileKind(k))
+	pool := make([]TileSymbol, 0, total)
+	for k := 1; k <= numSymbols; k++ {
+		for range tilesPerSymbol {
+			pool = append(pool, TileSymbol(k))
 		}
 	}
 
@@ -56,8 +56,6 @@ func generateBoard(innerRows, innerCols, numKinds, tilesPerKind int, rng *rand.R
 
 // solveBoard returns a sequence that clears the board, or nil if unsolvable.
 // This is a greedy solver: it repeatedly finds any valid pair and removes it.
-//
-//nolint:mnd
 func solveBoard(b *Board) []solvePair {
 	work := NewBoard(b.Rows-2, b.Cols-2)
 	r0, _, r1, _ := b.InnerBounds()
@@ -71,10 +69,10 @@ func solveBoard(b *Board) []solvePair {
 		if !found {
 			break
 		}
-		kind := work.Cells[a.R][a.C]
+		sym := work.Cells[a.R][a.C]
 		work.Cells[a.R][a.C] = TileEmpty
 		work.Cells[b.R][b.C] = TileEmpty
-		moves = append(moves, solvePair{A: a, B: b, Kind: kind})
+		moves = append(moves, solvePair{A: a, B: b, Symbol: sym})
 	}
 
 	if work.RemainingTiles() != 0 {
@@ -87,7 +85,7 @@ func solveBoard(b *Board) []solvePair {
 // shuffleRemaining shuffles all remaining tiles in place.
 func shuffleRemaining(b *Board, rng *rand.Rand) {
 	var positions []Point
-	var tiles []TileKind
+	var tiles []TileSymbol
 
 	// Pool the remaining tiles
 	r0, c0, r1, c1 := b.InnerBounds()

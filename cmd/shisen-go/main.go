@@ -44,17 +44,15 @@ type Game struct {
 }
 
 // NewGame returns a new Game instance, can be called multiple times.
-//
-//nolint:mnd
 func NewGame() *Game {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
-	board := generateSolvableBoard(innerRows, innerCols, numTileKinds, tilesPerKind, rng)
+	board := generateSolvableBoard(gameInnerRows, gameInnerCols, gameNumSymbols, gameTilesPerSymbol, rng)
 
 	g := &Game{
 		board:    board,
 		rng:      rng,
 		state:    statePlaying,
-		shuffles: defaultShuffles,
+		shuffles: gameShuffles,
 	}
 
 	// Font
@@ -136,7 +134,6 @@ func (g *Game) Update() error {
 	// Restart the game
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		*g = *NewGame()
-		initTileCache(g.tileFace)
 
 		return nil
 	}
@@ -157,8 +154,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	r0, c0, r1, c1 := g.board.InnerBounds()
 	for r := r0; r < r1; r++ {
 		for c := c0; c < c1; c++ {
-			kind := g.board.Get(r, c)
-			if kind == TileEmpty {
+			sym := g.board.Get(r, c)
+			if sym == TileEmpty {
 				continue
 			}
 
@@ -179,7 +176,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				}
 			}
 
-			drawTile(screen, kind, x, y, selected)
+			drawTile(screen, sym, x, y, selected)
 		}
 	}
 
@@ -193,8 +190,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 // drawHUD is a helper function that draws the HUD onto the screen.
-//
-//nolint:mnd
 func (g *Game) drawHUD(screen *ebiten.Image) {
 	// Draw the HUD at the top of the screen:
 	msg := hudIdleMessage
@@ -286,7 +281,7 @@ func (g *Game) handleClick(mx, my int) {
 
 	// No connection is possible.
 	g.sel1 = nil
-	g.setMessage("No valid path or color not matching!", timeoutMessageWarning)
+	g.setMessage("No valid path or symbol not matching!", timeoutMessageWarning)
 }
 
 // setMessage sets a message and TTL to be shown in the HUD.

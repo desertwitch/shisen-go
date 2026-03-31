@@ -29,6 +29,9 @@ linters:
       checks:
         - all
         - -S1008
+    mnd:
+      ignored-numbers:
+        - 2
   exclusions:
     generated: lax
     presets:

@@ -23,7 +23,7 @@ func findPath(b *Board, r1, c1, r2, c2 int) []Point {
 	if b.Get(r1, c1) == TileEmpty || b.Get(r2, c2) == TileEmpty {
 		return nil
 	}
-	// Both selected tiles are not of the same kind:
+	// Both selected tiles are not of the same symbol:
 	if b.Get(r1, c1) != b.Get(r2, c2) {
 		return nil
 	}
@@ -128,8 +128,8 @@ func clearBetween(b *Board, r1, c1, r2, c2 int) bool {
 func hasAnyMatch(b *Board) (bool, Point, Point) {
 	r0, c0, r1, c1 := b.InnerBounds()
 
-	// Group tile positions by kind
-	groups := make(map[TileKind][]Point)
+	// Group tile positions by symbol
+	groups := make(map[TileSymbol][]Point)
 	for r := r0; r < r1; r++ {
 		for c := c0; c < c1; c++ {
 			k := b.Cells[r][c]

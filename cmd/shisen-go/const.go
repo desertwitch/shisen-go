@@ -23,31 +23,37 @@ const (
 	screenW = 960 // Pixel width total of screen
 	screenH = 650 // Pixel height total of screen
 
-	tileW = 48 // Pixel width of a single tile
-	tileH = 64 // Pixel height of a single tile
+	tileW       = 48  // Pixel width of a single tile
+	tileH       = 64  // Pixel height of a single tile
+	tileBorderW = 1.5 // Pixel width of a single tile border
+
+	pathW = 3 // Pixel width of the drawn path between tiles
 
 	hudTopH = 32 // Pixel height of the top HUD
 	hudBotH = 32 // Pixel height of the bottom HUD
 	hudPadY = 4  // Pixel height of HUD padding (Y)
 
-	fontSizeHud  = 18
-	fontSizeTile = 28
-)
-
-// Requirement: numTileKinds * tilesPerKind == innerRows * innerCols.
-// Beware if this requirement is not met, the program will panic upon game creation.
-const (
-	numTileKinds = 36
-	tilesPerKind = 4
-	innerRows    = 8
-	innerCols    = 18
-
-	defaultShuffles = 3
+	fontSizeHud  = 18 // pixels
+	fontSizeTile = 28 // pixels
 
 	timeoutMessageNever   = -1 // frames
 	timeoutMessageWarning = 80 // frames
 	timeoutPathVisible    = 20 // frames
 	timeoutHintVisible    = 90 // frames
+
+	gameNumSymbols     = 36 // count
+	gameTilesPerSymbol = 4  // count
+	gameInnerRows      = 8  // count
+	gameInnerCols      = 18 // count
+	gameShuffles       = 3  // count
+)
+
+// Requirement: gameNumSymbols * gameTilesPerSymbol == gameInnerRows * gameInnerCols.
+// Beware if this requirement is not met, the program will panic upon game creation.
+// This compile-time trick guarantees that this is not the case, so keep it in place.
+var (
+	_ [gameNumSymbols*gameTilesPerSymbol - gameInnerRows*gameInnerCols]struct{}
+	_ [gameInnerRows*gameInnerCols - gameNumSymbols*gameTilesPerSymbol]struct{}
 )
 
 var (
@@ -63,8 +69,8 @@ var (
 	gameMusicSampleRate = 44100
 	gameMusicVolume     = 0.4
 
-	tileImageCache    map[TileKind]*ebiten.Image
-	tileSelectedCache map[TileKind]*ebiten.Image
+	tileImageCache    map[TileSymbol]*ebiten.Image
+	tileSelectedCache map[TileSymbol]*ebiten.Image
 
 	tileColorBackground         = color.RGBA{0xF5, 0xF0, 0xE0, 0xFF} // cream
 	tileColorBackgroundSelected = color.RGBA{0xFF, 0xFF, 0x80, 0xFF} // bright yellow
