@@ -9,6 +9,10 @@
     height: 100%;
     background: #2A2D35;
     font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
   }
   #hint-top {
     color: #6E6E6E;
@@ -25,30 +29,9 @@
   iframe {
     border: none;
     display: block;
+    width: 960px;
+    height: 650px;
     background: #2A2D35;
-  }
-
-  @media (max-height: 700px) {
-      html, body {
-        overflow: hidden;
-      }
-      #hint-top, #hint-bottom { display: none; }
-      iframe {
-        width: 100vw;
-        height: calc(100vw * 650 / 960);
-        max-height: 100vh;
-        max-width: calc(100vh * 960 / 650);
-      }
-  }
-
-  @media (min-height: 701px) {
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-    iframe { width: 960px; height: 650px; }
   }
 </style>
 </head>
