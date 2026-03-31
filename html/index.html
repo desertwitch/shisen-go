@@ -28,11 +28,16 @@
   }
 
   @media (max-height: 700px) {
-    html, body {
-      overflow: hidden;
-    }
-    #hint-top, #hint-bottom { display: none; }
-    iframe { width: 100vw; height: 100vh; }
+      html, body {
+        overflow: hidden;
+      }
+      #hint-top, #hint-bottom { display: none; }
+      iframe {
+        width: 100vw;
+        height: calc(100vw * 650 / 960);
+        max-height: 100vh;
+        max-width: calc(100vh * 960 / 650);
+      }
   }
 
   @media (min-height: 701px) {
