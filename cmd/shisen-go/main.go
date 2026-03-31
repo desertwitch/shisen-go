@@ -115,10 +115,16 @@ func (g *Game) Update() error {
 		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
 			g.doShuffle()
 		}
-		// Select a tile
+		// Select a tile (mouse)
 		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 			mx, my := ebiten.CursorPosition()
 			g.handleClick(mx, my)
+		}
+		// Select a tile (touch)
+		touchIDs := inpututil.AppendJustPressedTouchIDs(nil)
+		for _, id := range touchIDs {
+			tx, ty := ebiten.TouchPosition(id)
+			g.handleClick(tx, ty)
 		}
 	}
 
