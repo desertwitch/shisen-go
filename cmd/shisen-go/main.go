@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -258,7 +259,7 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 
 	// Draw the HUD at the bottom of the screen:
 	remaining := g.board.RemainingTiles()
-	info := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  [H] Hint  [S] Shuffle  [R] Restart  [A] Audio", remaining, g.shuffles)
+	info := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  [Hint]  [Shuffle]  [Restart]  [Audio]", remaining, g.shuffles)
 
 	op = &text.DrawOptions{}
 	w, h = text.Measure(info, g.hudFace, 0)
@@ -269,34 +270,39 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 
 // Compute HUD button zones from actual text measurements.
 func (g *Game) computeHudButtons() {
-	prefix := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  ", g.board.RemainingTiles(), g.shuffles)
+	remaining := g.board.RemainingTiles()
+	info := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  [Hint]  [Shuffle]  [Restart]  [Audio]", remaining, g.shuffles)
 
-	actions := []struct {
+	fullW, _ := text.Measure(info, g.hudFace, 0)
+	baseX := (float64(screenW) - fullW) / 2
+
+	labels := []struct {
 		label  string
 		action string
 	}{
-		{"[H] Hint  ", "hint"},
-		{"[S] Shuffle  ", "shuffle"},
-		{"[R] Restart  ", "restart"},
-		{"[A] Audio", "audio"},
+		{"[Hint]", "hint"},
+		{"[Shuffle]", "shuffle"},
+		{"[Restart]", "restart"},
+		{"[Audio]", "audio"},
 	}
 
-	fullStr := prefix
-	pw, _ := text.Measure(prefix, g.hudFace, 0)
-	hudW, _ := text.Measure(fullStr+actions[0].label+actions[1].label+actions[2].label+actions[3].label, g.hudFace, 0)
-	baseX := (float64(screenW) - hudW) / 2
-
 	g.hudButtons = nil
-	offsetX := baseX + pw
+	for _, a := range labels {
+		// Find the byte index of this label in the full string
+		idx := strings.Index(info, a.label)
+		if idx < 0 {
+			continue
+		}
 
-	for _, a := range actions {
-		w, _ := text.Measure(a.label, g.hudFace, 0)
+		// Measure the substring up to the start and end of the label
+		prefixW, _ := text.Measure(info[:idx], g.hudFace, 0)
+		prefixPlusLabelW, _ := text.Measure(info[:idx+len(a.label)], g.hudFace, 0)
+
 		g.hudButtons = append(g.hudButtons, hudButton{
-			x0:     int(offsetX),
-			x1:     int(offsetX + w),
+			x0:     int(baseX + prefixW),
+			x1:     int(baseX + prefixPlusLabelW),
 			action: a.action,
 		})
-		offsetX += w
 	}
 }
 
