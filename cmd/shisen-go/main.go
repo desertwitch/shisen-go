@@ -15,6 +15,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
+type hudButton struct {
+	x0, x1 int // pixels
+	action string
+}
+
 // Game is the primary structure for our game.
 type Game struct {
 	board *Board
@@ -27,6 +32,8 @@ type Game struct {
 
 	hudFace  text.Face // Font face for UI text
 	tileFace text.Face // Font face for tile symbols
+
+	hudButtons []hudButton // HUD button bounds
 
 	offsetX float64 // Pixel offset X to center board
 	offsetY float64 // Pixel offset Y to center board
@@ -84,6 +91,8 @@ func NewGame() *Game {
 }
 
 // Update handles the updating of all game elements and also keystrokes.
+//
+//nolint:gocognit,cyclop,funlen
 func (g *Game) Update() error {
 	// Update HUD
 	if g.pathTTL > 0 {
@@ -106,6 +115,17 @@ func (g *Game) Update() error {
 		}
 	}
 
+	// Register click events (mouse or touches)
+	clicks := []struct{ x, y int }{}
+	for _, id := range inpututil.AppendJustPressedTouchIDs(nil) {
+		tx, ty := ebiten.TouchPosition(id)
+		clicks = append(clicks, struct{ x, y int }{tx, ty})
+	}
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		mx, my := ebiten.CursorPosition()
+		clicks = append(clicks, struct{ x, y int }{mx, my})
+	}
+
 	if g.state == statePlaying {
 		// Hint a possible pairing
 		if inpututil.IsKeyJustPressed(ebiten.KeyH) {
@@ -115,19 +135,7 @@ func (g *Game) Update() error {
 		if inpututil.IsKeyJustPressed(ebiten.KeyS) {
 			g.doShuffle()
 		}
-		// Select a tile (mouse)
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			mx, my := ebiten.CursorPosition()
-			g.handleClick(mx, my)
-		}
-		// Select a tile (touch)
-		touchIDs := inpututil.AppendJustPressedTouchIDs(nil)
-		for _, id := range touchIDs {
-			tx, ty := ebiten.TouchPosition(id)
-			g.handleClick(tx, ty)
-		}
 	}
-
 	// Toggle the audio
 	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		g.audioMuted = !g.audioMuted
@@ -142,6 +150,42 @@ func (g *Game) Update() error {
 		*g = *NewGame()
 
 		return nil
+	}
+
+	// Process click events - HUD first, then tile selection:
+	g.computeHudButtons()
+	for _, click := range clicks {
+		if click.y >= screenH-hudBotH {
+			for _, btn := range g.hudButtons {
+				if click.x >= btn.x0 && click.x < btn.x1 {
+					switch btn.action {
+					case "hint":
+						if g.state == statePlaying {
+							g.doHint()
+						}
+					case "shuffle":
+						if g.state == statePlaying {
+							g.doShuffle()
+						}
+					case "restart":
+						*g = *NewGame()
+
+						return nil
+					case "audio":
+						g.audioMuted = !g.audioMuted
+						if g.audioMuted {
+							gameMusicPlayer.Pause()
+						} else {
+							gameMusicPlayer.Play()
+						}
+					}
+
+					break
+				}
+			}
+		} else if g.state == statePlaying {
+			g.handleClick(click.x, click.y)
+		}
 	}
 
 	return nil
@@ -221,6 +265,39 @@ func (g *Game) drawHUD(screen *ebiten.Image) {
 	op.GeoM.Translate(float64(screenW)/2-w/2, float64(screenH-hudBotH)+(float64(hudBotH)-h)/2-hudPadY)
 	op.ColorScale.ScaleWithColor(hudColorMessageDefault)
 	text.Draw(screen, info, g.hudFace, op)
+}
+
+// Compute HUD button zones from actual text measurements.
+func (g *Game) computeHudButtons() {
+	prefix := fmt.Sprintf("Tiles: %d  |  Shuffles: %d  |  ", g.board.RemainingTiles(), g.shuffles)
+
+	actions := []struct {
+		label  string
+		action string
+	}{
+		{"[H] Hint  ", "hint"},
+		{"[S] Shuffle  ", "shuffle"},
+		{"[R] Restart  ", "restart"},
+		{"[A] Audio", "audio"},
+	}
+
+	fullStr := prefix
+	pw, _ := text.Measure(prefix, g.hudFace, 0)
+	hudW, _ := text.Measure(fullStr+actions[0].label+actions[1].label+actions[2].label+actions[3].label, g.hudFace, 0)
+	baseX := (float64(screenW) - hudW) / 2
+
+	g.hudButtons = nil
+	offsetX := baseX + pw
+
+	for _, a := range actions {
+		w, _ := text.Measure(a.label, g.hudFace, 0)
+		g.hudButtons = append(g.hudButtons, hudButton{
+			x0:     int(offsetX),
+			x1:     int(offsetX + w),
+			action: a.action,
+		})
+		offsetX += w
+	}
 }
 
 // handeClick implements the clicking logic for selecting tiles.
